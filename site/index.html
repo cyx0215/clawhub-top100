@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>淘金小镇 - ClawHub Skill 排行榜</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --dim: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149; --yellow: #d29922; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.8em; margin-bottom: 8px; }
+  h1 span { color: var(--yellow); }
+  .subtitle { color: var(--dim); margin-bottom: 24px; font-size: 0.95em; }
+  .date-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+  .date-nav label { color: var(--dim); font-size: 0.9em; }
+  .date-nav select { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; font-size: 0.9em; }
+  .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .stat-card .num { font-size: 1.8em; font-weight: bold; color: var(--accent); }
+  .stat-card .label { color: var(--dim); font-size: 0.85em; margin-top: 4px; }
+  .section { margin-bottom: 32px; }
+  .section h2 { font-size: 1.3em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .section h2 .badge { font-size: 0.7em; background: var(--accent); color: var(--bg); padding: 2px 8px; border-radius: 12px; vertical-align: middle; margin-left: 8px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  th { background: #1c2128; color: var(--dim); font-weight: 600; text-align: left; padding: 10px 12px; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 12px; border-top: 1px solid var(--border); font-size: 0.9em; }
+  tr:hover td { background: #1c2128; }
+  .rank { font-weight: bold; color: var(--yellow); min-width: 36px; }
+  .name { font-weight: 600; }
+  .name a { color: var(--text); text-decoration: none; }
+  .name a:hover { color: var(--accent); text-decoration: underline; }
+  .author { color: var(--dim); }
+  .slug { color: var(--dim); font-family: monospace; font-size: 0.85em; }
+  .num-cell { text-align: right; font-variant-numeric: tabular-nums; }
+  .delta-pos { color: var(--green); }
+  .delta-neg { color: var(--red); }
+  .delta-na { color: var(--dim); }
+  .tag { display: inline-block; font-size: 0.75em; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+  .tag-new { background: var(--green); color: var(--bg); }
+  .tag-drop { background: var(--red); color: var(--bg); }
+  .tag-hot { background: var(--yellow); color: var(--bg); }
+  .potential-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .potential-card h3 { font-size: 1em; margin-bottom: 6px; }
+  .potential-card .reasons { color: var(--green); font-size: 0.85em; }
+  .potential-card .meta { color: var(--dim); font-size: 0.85em; margin-top: 4px; }
+  .loading { text-align: center; padding: 60px; color: var(--dim); font-size: 1.2em; }
+  .error { text-align: center; padding: 40px; color: var(--red); }
+  @media (max-width: 768px) { body { padding: 12px; } table { font-size: 0.85em; } td, th { padding: 6px 8px; } }
+</style>
+</head>
+<body>
+
+<h1>⛏️ <span>淘金小镇</span></h1>
+<p class="subtitle">ClawHub Skill 下载榜 Top100 · 每日快照 · 发现潜力 Skill</p>
+
+<div class="date-nav">
+  <label>选择日期：</label>
+  <select id="dateSelect"><option>加载中...</option></select>
+</div>
+
+<div id="content"><div class="loading">⏳ 加载数据中...</div></div>
+
+<script>
+const DATA_BASE = 'https://raw.githubusercontent.com/LearnPrompt/skillrush-town/main/data';
+let allDates = [];
+
+async function init() {
+  try {
+    const resp = await fetch(`${DATA_BASE}/dates.json`);
+    const data = await resp.json();
+    allDates = data.dates || [];
+    const sel = document.getElementById('dateSelect');
+    sel.innerHTML = allDates.map(d => `<option value="${d}">${d}</option>`).join('');
+    sel.value = data.latest || allDates[0];
+    sel.onchange = () => loadDate(sel.value);
+    loadDate(sel.value);
+  } catch (e) {
+    // Fallback: try local data
+    document.getElementById('dateSelect').innerHTML = '<option>无法加载日期列表</option>';
+    document.getElementById('content').innerHTML = `<div class="error">无法加载数据: ${e.message}</div>`;
+  }
+}
+
+async function loadDate(d) {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="loading">⏳ 加载中...</div>';
+  try {
+    const resp = await fetch(`${DATA_BASE}/snapshots/${d}.json`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const snap = await resp.json();
+    render(snap);
+  } catch (e) {
+    el.innerHTML = `<div class="error">加载 ${d} 失败: ${e.message}</div>`;
+  }
+}
+
+function fmtDelta(v) {
+  if (v === null || v === undefined) return '<span class="delta-na">n/a</span>';
+  if (v > 0) return `<span class="delta-pos">+${v}</span>`;
+  if (v < 0) return `<span class="delta-neg">${v}</span>`;
+  return `<span class="delta-na">0</span>`;
+}
+
+function render(snap) {
+  const items = snap.items || [];
+  const hasHistory = items.some(i => i.prev_rank !== null);
+  const newEntries = hasHistory ? items.filter(i => i.prev_rank === null) : [];
+  const dropped = snap.dropped_items || [];
+
+  // Top 10 with deltas
+  const top10 = items.slice(0, 10);
+  // Download delta top 10
+  const dlTop = items.filter(i => i.download_delta != null && i.download_delta !== 0)
+    .sort((a,b) => b.download_delta - a.download_delta).slice(0, 10);
+  // Star delta top 10
+  const starTop = items.filter(i => i.star_delta != null && i.star_delta !== 0)
+    .sort((a,b) => b.star_delta - a.star_delta).slice(0, 10);
+  // Potential
+  const potentials = items.filter(i => {
+    const reasons = [];
+    if (i.download_delta > 0 && i.prev_rank !== null) reasons.push('下载增长');
+    if (i.star_delta > 0 && i.prev_rank !== null) reasons.push('星标增长');
+    if (i.rank_change >= 8) reasons.push('排名上升 ≥8');
+    return reasons.length > 0;
+  }).slice(0, 10);
+
+  let html = '';
+
+  // Stats bar
+  html += `<div class="stats-bar">
+    <div class="stat-card"><div class="num">${items.length}</div><div class="label">本次抓取</div></div>
+    <div class="stat-card"><div class="num">${snap.source.pages_succeeded}/4</div><div class="label">成功页数</div></div>
+    <div class="stat-card"><div class="num">${newEntries.length}</div><div class="label">新进榜</div></div>
+    <div class="stat-card"><div class="num">${dropped.length}</div><div class="label">掉榜</div></div>
+    <div class="stat-card"><div class="num">${potentials.length}</div><div class="label">潜力 Skill</div></div>
+  </div>`;
+
+  // Potential Skills
+  if (potentials.length > 0) {
+    html += `<div class="section"><h2>🔥 潜力 Skill <span class="badge">${potentials.length}</span></h2>`;
+    for (const p of potentials) {
+      const reasons = [];
+      if (p.download_delta > 0 && p.prev_rank !== null) reasons.push('📥 下载增长');
+      if (p.star_delta > 0 && p.prev_rank !== null) reasons.push('⭐ 星标增长');
+      if (p.rank_change >= 8) reasons.push('📈 排名上升');
+      const rankInfo = p.prev_rank !== null ? `${p.prev_rank} → ${p.rank}` : '新进';
+      html += `<div class="potential-card">
+        <h3>#${p.rank} ${p.name} <span style="color:var(--dim);font-weight:normal">by ${p.author}</span></h3>
+        <div class="reasons">${reasons.join(' · ')}</div>
+        <div class="meta">排名 ${rankInfo} · 下载 ${fmtDelta(p.download_delta)} · 星标 ${fmtDelta(p.star_delta)} · slug: <code>${p.slug}</code></div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // Full Top 100
+  html += `<div class="section"><h2>📋 完整 Top100</h2>
+  <table><thead><tr><th>#</th><th>Skill</th><th>作者</th><th class="num-cell">下载</th><th class="num-cell">星标</th><th class="num-cell">排名变化</th></tr></thead><tbody>`;
+  for (const i of items) {
+    const rankChange = i.rank_change !== null ? (i.rank_change > 0 ? `<span class="delta-pos">↑${i.rank_change}</span>` : i.rank_change < 0 ? `<span class="delta-neg">↓${Math.abs(i.rank_change)}</span>` : '-') : '<span class="delta-na">-</span>';
+    html += `<tr>
+      <td class="rank">${i.rank}</td>
+      <td class="name"><a href="https://clawhub.ai/skills/${i.slug}" target="_blank">${i.name}</a></td>
+      <td class="author">${i.author}</td>
+      <td class="num-cell">${i.downloads !== null ? i.downloads.toLocaleString() : '<span class="delta-na">n/a</span>'}</td>
+      <td class="num-cell">${i.stars !== null ? i.stars.toLocaleString() : '<span class="delta-na">n/a</span>'}</td>
+      <td class="num-cell">${rankChange}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  // Meta
+  html += `<div class="section" style="color:var(--dim);font-size:0.85em">
+    <p>抓取时间：${snap.fetched_at} · 接口：Convex API (skills:listPublicPageV4) · 对比：${snap.comparison_basis.note || '无'}</p>
+    ${(snap.limitations || []).map(l => `<p>⚠️ ${l}</p>`).join('')}
+  </div>`;
+
+  document.getElementById('content').innerHTML = html;
+}
+
+init();
+</script>
+</body>
+</html>
